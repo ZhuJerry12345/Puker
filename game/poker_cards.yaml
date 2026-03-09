@@ -259,13 +259,13 @@ cards:
   name: 梅花K
   skill: 无技能
   rarity: 普通
-- suit: 无
-  value: 小王
-  name: 小王
-  skill: 无技能
-  rarity: 特殊
-- suit: 无
-  value: 大王
-  name: 大王
-  skill: 无技能
-  rarity: 特殊
+# - suit: 无
+#   value: 小王
+#   name: 小王
+#   skill: 无技能
+#   rarity: 特殊
+# - suit: 无
+#   value: 大王
+#   name: 大王
+#   skill: 无技能
+#   rarity: 特殊

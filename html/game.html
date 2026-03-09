@@ -232,22 +232,15 @@
         const btnReset = document.getElementById('btn-reset');
         const statusText = document.getElementById('status-text');
 
-        // 复原逻辑
-        async function resetGame() {
-            // 从后端接收手牌数据（如果需要动态加载）
-            try {
-                const response = await fetch('/api/startGame', { method: 'POST' });
-                if (!response.ok) {
-                    throw new Error('网络响应失败');
-                }
-                const data = await response.json();
-                // 后端返回的格式是 { player1: [...], player2: [...], player3: [...] }
-                // 这里我们只取 player1 的牌作为当前手牌
-                // 遍历后端返回的牌数据，转换成 { value, suit } 格式
-
-                const player1Cards = data.player1.Cards.map(cardStr => {
+        window.addEventListener('message', function(event) {
+            console.log('收到来自父窗口的消息:', event.data);
+            const data = event.data;
+            // if (data.event === 'StartGame') {
+                // 这里可以根据后端传来的数据来设置 currentHand
+                // 例如：currentHand = data.cards;
+                // 然后重新渲染
+                currentHand = data.Cards.map(cardStr => {
                     const value = cardStr.Value || cardStr.value; // 兼容大小写
-                    // const suit = "hearts";
                     let suit = cardStr.Suit || cardStr.suit; // 兼容大小写
                     if(suit == "红桃") suit = "hearts";
                     else if(suit == "黑桃") suit = "spades";
@@ -255,14 +248,44 @@
                     else if(suit == "梅花") suit = "clubs";
                     return { value, suit};
                 });
-                currentHand = player1Cards;
                 renderHand();
-            } catch (error) {
-                console.error('发生错误:', error);
-                // 如果后端请求失败，仍然使用初始牌组数据
-                currentHand = [...initialCardsData];
-                renderHand();
-            }
+            // }
+        });
+
+        // 复原逻辑
+        async function resetGame() {
+            // 测试：恢复默认设置
+            currentHand = [...initialCardsData];
+            renderHand();
+            // 从后端接收手牌数据（如果需要动态加载）
+            // try {
+            //     const response = await fetch('/api/startGame', { method: 'POST' });
+            //     if (!response.ok) {
+            //         throw new Error('网络响应失败');
+            //     }
+            //     const data = await response.json();
+            //     // 后端返回的格式是 { player1: [...], player2: [...], player3: [...] }
+            //     // 这里我们只取 player1 的牌作为当前手牌
+            //     // 遍历后端返回的牌数据，转换成 { value, suit } 格式
+
+            //     const player1Cards = data.player1.Cards.map(cardStr => {
+            //         const value = cardStr.Value || cardStr.value; // 兼容大小写
+            //         // const suit = "hearts";
+            //         let suit = cardStr.Suit || cardStr.suit; // 兼容大小写
+            //         if(suit == "红桃") suit = "hearts";
+            //         else if(suit == "黑桃") suit = "spades";
+            //         else if(suit == "方块") suit = "diamonds";
+            //         else if(suit == "梅花") suit = "clubs";
+            //         return { value, suit};
+            //     });
+            //     currentHand = player1Cards;
+            //     renderHand();
+            // } catch (error) {
+            //     console.error('发生错误:', error);
+            //     // 如果后端请求失败，仍然使用初始牌组数据
+            //     currentHand = [...initialCardsData];
+            //     renderHand();
+            // }
         }
 
         // 渲染手牌

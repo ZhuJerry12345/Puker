@@ -24,6 +24,11 @@ func HandleIndex(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	// 启动房间管理器
+	go room.RM.Run()
+	// 启动玩家管理器
+	go room.PM.Run()
+
 	mux := http.NewServeMux()
 
 	// 公开路由
@@ -33,11 +38,11 @@ func main() {
 	mux.HandleFunc("/game", game.HandleGameH)      // 提供游戏页面
 	mux.HandleFunc("/room", room.HandleRoomH)      // 提供房间页面
 
-	mux.HandleFunc("/api/login", login.HandleLogin)                                 // 登录接口
-	mux.HandleFunc("/api/logout", login.HandleLogout)                               // 登出接口
-	mux.HandleFunc("/api/check-login", login.HandleCheckLogin)                      // 检查登录状态接口
-	mux.HandleFunc("/api/startGame", game.HandleStartGame)                          // 受保护的游戏接口
-	mux.HandleFunc("/api/create-room", login.AuthMiddleware(room.HandleCreateRoom)) // 受保护的创建房间接口
+	mux.HandleFunc("/api/login", login.HandleLogin)                           // 登录接口
+	mux.HandleFunc("/api/logout", login.HandleLogout)                         // 登出接口
+	mux.HandleFunc("/api/check-login", login.HandleCheckLogin)                // 检查登录状态接口
+	mux.HandleFunc("/api/startGame", game.HandleStartGame)                    // 受保护的游戏接口
+	mux.HandleFunc("/api/ws", login.AuthMiddleware(room.HandleRoomWebSocket)) // 受保护的 WebSocket 连接接口
 
 	// 受保护路由 (需要 Session)
 	mux.HandleFunc("/api/user", login.AuthMiddleware(login.HandleUserData))

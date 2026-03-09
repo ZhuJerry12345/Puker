@@ -1,77 +1,103 @@
 package room
 
 import (
+	"encoding/json"
 	"log"
 	"sync"
-
-	"github.com/gorilla/websocket"
 )
 
-type RoomPlayer struct {
-	ID     string          // 玩家ID或用户名
-	Conn   *websocket.Conn // 玩家WebSocket连接
-	Status string          // 玩家状态（如：在线、离线、准备中）
-	Room   *Room           // 玩家所在的房间 用于注销玩家
+type RoomManager struct {
+	RoomList map[string]*Room //房间id到房间实例的映射 由于Room包含锁，需要使用指针类型以避免值传递
+
+	create chan *Room   // 创建房间的通道
+	close  chan *Room   // 关闭房间的通道
+	done   chan bool    // 处理完成的通道
+	mu     sync.RWMutex //读写锁
 }
 
-type Room struct {
-	ID         string               // 房间ID
-	Name       string               // 房间名称
-	Hoster     string               // 房主ID或用户名
-	RoomPlayer map[*RoomPlayer]bool // 房间内的玩家列表
-	regester   chan *RoomPlayer     // 注册玩家的通道
-	unregister chan *RoomPlayer     // 注销玩家的通道
-	Status     string               // 房间状态（如：等待中、游戏中、已结束）
-	mu         sync.RWMutex         // 读写锁，保护房间数据的并发访问
+var RM = RoomManager{
+	RoomList: make(map[string]*Room),
+	create:   make(chan *Room),
+	close:    make(chan *Room),
+	done:     make(chan bool),
 }
 
-// NewRoom 使用房间id创建一个新的房间实例，并将其添加到房间管理器中,启动房间。
-func (rm *RoomManager) NewRoom(id string, name string, roomplayer RoomPlayer) {
-	rm.mu.Lock()
-	room := &Room{
-		ID:         id,
-		Name:       name,
-		Hoster:     roomplayer.ID,
-		RoomPlayer: make(map[*RoomPlayer]bool),
-		regester:   make(chan *RoomPlayer),
-		unregister: make(chan *RoomPlayer),
-		Status:     "等待中",
-	}
-	room.RoomPlayer[&roomplayer] = true // 将房主添加到玩家列表
-	rm.Room[room.ID] = room
-	rm.mu.Unlock()
-	log.Println("房间创建成功: ", room.ID)
-	go room.RunRoom() // 启动房间
-}
-
-func (r *Room) RunRoom() {
-	log.Printf("房间 %s 已启动，等待玩家加入...", r.ID)
+func (rm *RoomManager) Run() {
+	log.Printf("房间管理器已启动，等待房间创建和关闭请求...")
 	for {
 		select {
-		case player := <-r.regester:
-			r.mu.Lock()
-			r.RoomPlayer[player] = true
-			r.mu.Unlock()
-			log.Printf("玩家 %s 加入了房间 %s, 当前在线 %d", player.ID, r.ID, len(r.RoomPlayer))
-		case player := <-r.unregister:
-			r.mu.Lock()
-			delete(r.RoomPlayer, player)
-			r.mu.Unlock()
-			log.Printf("玩家 %s 离开了房间 %s, 当前在线 %d", player.ID, r.ID, len(r.RoomPlayer))
-			// 如果房间内没有玩家了，可以考虑销毁房间（可选功能）
-			if len(r.RoomPlayer) == 0 {
-				log.Printf("房间 %s 已空，准备销毁...", r.ID)
+		case room := <-rm.create:
+			rm.mu.Lock() // 房间管理器上锁
+			rm.RoomList[room.ID] = room
+			rm.mu.Unlock()
+			log.Printf("房间 %s 已创建, 当前房间总数 %d", room.ID, len(rm.RoomList))
+			go room.Run()   // 启动房间的协程
+			rm.done <- true // 发送处理完成的信号
+		case room := <-rm.close:
+			//移除房间内所有玩家
+			room.mu.Lock()
+			for _, player := range room.PlayerList {
+				player.mu.Lock()
+				if player.Status != "掉线中" {
+					player.Room = nil // 将玩家的房间设置为 nil，表示不在任何房间内
+					player.Status = "空闲"
+				} else {
+					PM.unregister <- player // 玩家掉线且不在房间中，注销玩家
+					<-PM.done
+				}
+				player.mu.Unlock()
 			}
+			room.mu.Unlock()
+
+			rm.mu.Lock() // 房间管理器上锁
+			delete(rm.RoomList, room.ID)
+			rm.mu.Unlock()
+			log.Printf("房间 %s 已关闭, 当前房间总数 %d", room.ID, len(rm.RoomList))
+			rm.done <- true // 发送处理完成的信号
 		}
 	}
-
 }
 
-type RoomManager struct {
-	Room map[string]*Room //房间列表 由于Room包含锁，需要使用指针类型以避免值传递
-	mu   sync.RWMutex     //读写锁
-}
+func (rm *RoomManager) CreateRoom(p *Player, data json.RawMessage) {
+	log.Println("处理创建房间请求,来源", p.ID, "数据:", string(data))
+	// type req struct {
+	// 	RoomName string `json:"room_name"`
+	// }
+	// var r req
+	// err := json.Unmarshal(data, &r)
+	// if err != nil {
+	// 	log.Printf("创建房间请求格式错误: %v", err)
+	// 	return
+	// }
 
-var roomManager = RoomManager{
-	Room: make(map[string]*Room),
+	// 判断用户是否已经在房间中，若在，则拒绝创建房间请求
+	p.mu.RLock()
+	if p.Room != nil {
+		log.Printf("玩家 %s 已经在房间 %s 中，无法创建新房间", p.ID, p.Room.ID)
+		p.mu.RUnlock()
+		return
+	}
+	p.mu.RUnlock()
+
+	// 创建房间实例
+	room := &Room{
+		ID:         p.ID,
+		Name:       p.ID,
+		Hoster:     p.ID,
+		PlayerList: make(map[string]*Player),
+		join:       make(chan *Player),
+		leave:      make(chan *Player),
+
+		done:   make(chan bool),
+		Status: "等待中",
+		mu:     sync.RWMutex{},
+	}
+	// 将房间添加到房间管理器
+	rm.create <- room
+	<-rm.done // 等待房间创建完成
+	// 将玩家加入房间
+	room.join <- p
+	<-room.done // 等待玩家加入完成
+
+	room.BroadcastPlayerList() // 广播房间玩家列表
 }
