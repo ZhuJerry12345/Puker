@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>注册</title>
+    <style>
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            max-width: 600px; 
+            margin: 50px auto; 
+            padding: 20px; 
+            background-color: #f4f4f9; 
+        }
+        .card { 
+            background: white; 
+            padding: 30px; 
+            border-radius: 8px; 
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1); 
+        }
+        h2 { 
+            margin-top: 0; 
+            color: #333; 
+        }
+        .hidden { display: none; }
+        input { 
+            width: 100%; 
+            padding: 12px; 
+            margin: 10px 0; 
+            border: 1px solid #ddd; 
+            border-radius: 4px; 
+            box-sizing: border-box; 
+        }
+        button { 
+            width: 100%; 
+            padding: 12px; 
+            background: #007bff; 
+            color: white; 
+            border: none; 
+            border-radius: 4px; 
+            cursor: pointer; 
+            font-size: 16px; 
+            transition: background 0.2s; 
+        }
+        button:hover { background: #0056b3; }
+        button.logout { background: #dc3545; margin-top: 15px; }
+        button.logout:hover { background: #a71d2a; }
+        
+        .info-box { background: #e9ecef; padding: 15px; border-radius: 4px; margin-top: 20px; border-left: 4px solid #007bff; }
+        .info-box p { margin: 5px 0; }
+        label { font-weight: 600; color: #555; }
+        .loading { text-align: center; color: #666; font-style: italic; }
+        
+        .forgetLogin { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; }
+        .forget-link { color: #007bff; text-decoration: underline; font-size: 14px; }
+        .login-btn{
+            width: auto;
+            padding: 10px 20px;
+            background: #0a5cd8;
+        }
+        .error { color: #dc3545; font-size: 14px; margin-top: 10px; text-align: left; }
+
+    </style>
+</head>
+<body>
+
+    <!-- 登录区域 -->
+    <div id="signup-view" class="card">
+        <h2>欢迎</h2>
+        <p style="color: #666; font-size: 0.9em;">提示：账号 admin 或 user1，密码 123456</p>
+        <label for="username">用户名</label>
+        <input type="text" id="username" placeholder="请输入用户名">
+        
+        <label for="password">密码</label>
+        <input type="password" id="password" placeholder="请输入密码">
+
+        <label for="inviteNumber">邀请码 </label>
+        <input type="text" id="inviteNumber" placeholder="请输入邀请码">
+
+        <button onclick="handleSignup()">注册</button>
+
+    </div>
+
+    <!-- 用户数据区域 (受保护) -->
+    <div id="dashboard-view" class="card hidden">
+        <h2>欢迎, <span id="user-display-name"></span>!</h2>
+        <div id="data-content" class="loading">正在加载用户数据...</div>
+        
+        <div id="user-details" class="hidden">
+            <div class="info-box">
+                <p><strong>ID:</strong> <span id="u-id"></span></p>
+                <p><strong>角色:</strong> <span id="u-role"></span></p>
+                <p><strong>邮箱:</strong> <span id="u-email"></span></p>
+                <p><strong>简介:</strong> <span id="u-bio"></span></p>
+                <p><strong>服务器时间:</strong> <span id="u-time"></span></p>
+                <p style="margin-top:10px; color: green;"><em>✓ 身份已通过服务器端 Session 验证</em></p>
+            </div>
+            <button class="logout" onclick="handleLogout()">退出登录</button>
+        </div>
+    </div>
+
+    <script>
+        // 页面加载时检查登录状态
+        document.addEventListener('DOMContentLoaded', checkStatus);
+
+        async function checkStatus() {
+            // 浏览器会自动携带 Cookie，无需手动添加 Header
+            try {
+                const res = await fetch('/api/user');
+                if (res.ok) {
+                    const data = await res.json();
+                    showDashboard(data);
+                } else {
+                    showLogin();
+                }
+            } catch (e) {
+                showLogin();
+            }
+        }
+
+        async function handleLogin() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const msgDiv = document.getElementById('login-msg');
+
+            msgDiv.textContent = '';
+
+            try {
+                const res = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+
+                const data = await res.json();
+
+                if (!res.ok) {
+                    throw new Error(data.error || '登录失败');
+                }
+
+                // 登录成功，服务器已 Set-Cookie
+                // 刷新状态或重新请求用户数据
+                const userRes = await fetch('/api/user'); // 浏览器自动带 Cookie
+                if (userRes.ok) {
+                    const userData = await userRes.json();
+                    showDashboard(userData);
+                }
+            } catch (err) {
+                msgDiv.textContent = err.message;
+            }
+        }
+
+        async function handleLogout() {
+            await fetch('/api/logout', { method: 'POST' });
+            // 服务器已清除 Cookie 和 Session
+            showLogin();
+        }
+
+        function showDashboard(data) {
+            document.getElementById('login-view').classList.add('hidden');
+            document.getElementById('dashboard-view').classList.remove('hidden');
+            
+            document.getElementById('user-display-name').textContent = data.username;
+            document.getElementById('u-id').textContent = data.id;
+            document.getElementById('u-role').textContent = data.role;
+            document.getElementById('u-email').textContent = data.email;
+            document.getElementById('u-bio').textContent = data.bio;
+            document.getElementById('u-time').textContent = data.server_time;
+            
+            document.getElementById('data-content').classList.add('hidden');
+            document.getElementById('user-details').classList.remove('hidden');
+        }
+
+        function showLogin() {
+            document.getElementById('dashboard-view').classList.add('hidden');
+            document.getElementById('login-view').classList.remove('hidden');
+            document.getElementById('username').value = '';
+            document.getElementById('password').value = '';
+            document.getElementById('user-details').classList.add('hidden');
+            document.getElementById('data-content').classList.remove('hidden');
+        }
+    </script>
+</body>
+</html>

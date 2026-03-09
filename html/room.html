@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <style>
+        /* 基础样式 */
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            height: 100vh;
+        }
+        /* 棋牌桌部分 */
+        #game-table {
+            flex: 3;
+            background-color: #f0f0f0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        /* 聊天部分 */
+        #chat {
+            flex: 1;
+            background-color: #e0e0e0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+    </style>
+    <script>
+         // 在页面加载时检查是否已经登录
+        window.onload = async function() {
+            try {
+                const response = await fetch('/api/check-login', {
+                    method: 'GET',
+                    credentials: 'include' // 发送请求时携带cookie
+                });
+                if (!response.ok) {
+                    throw new Error('请登录');
+                    window.location.href = '/login';
+                }
+                // 登录状态正常，继续加载页面内容
+            } catch (error) {
+                console.error('检查登录状态时发生错误:', error);
+                window.location.href = '/login';
+            }
+        };
+    </script>
+</head>
+<body>
+    <!--棋牌桌部分-->
+    <div id="game-table">
+        <h2>游戏桌</h2>
+        <!-- 这里可以添加游戏桌的相关内容，如玩家列表、游戏状态等 -->
+    </div>
+    <!--聊天部分-->
+    <div id="chat">
+        <h2>聊天</h2>
+        <!-- 这里可以添加聊天的相关内容，如聊天记录、输入框等 -->
+        <!-- 玩家列表 -->
+        <div id="player-list">
+        
+    </div>
+
+    <script>
+        window.onload = async function() {
+        try {
+        const response2 = await fetch('/api/create-room', {
+            method: 'POST',
+            credentials: 'include' // 发送请求时携带cookie
+        });
+        if (!response2.ok) {
+            throw new Error('创建房间失败');
+        }
+        const data =  await response2.json();
+        const HosterName = data.HosterName;
+        const playerList = document.getElementById('player-list');
+        const playerItem = document.createElement('div');
+        playerItem.textContent = HosterName;
+        playerList.appendChild(playerItem);
+        console.log('房间创建成功，房主:', HosterName);
+        } catch (error) {
+            console.error('创建房间时发生错误:', error);
+        }
+    };
+    </script>
+
+                
+
+</body>
+</html>

@@ -1,0 +1,18 @@
+cards:
+  - suit : "红桃"
+    value : "A"
+    name : "红桃A"
+    skill : "无技能"
+    rarity : "普通"
+    
+  - suit : "红桃"
+    value : "2"
+    name : "红桃2"
+    skill : "无技能"
+    rarity : "普通"
+
+  - suit : "红桃"
+    value : "3"
+    name : "红桃3"
+    skill : "无技能"  
+    rarity : "普通"

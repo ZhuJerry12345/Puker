@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>扑克牌出牌系统</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            background-color: #2e7d32;
+            display: flex;
+            flex-direction: column; /* 垂直排列：牌区在上，按钮区在下 */
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            overflow: hidden; /* 防止出牌动画时出现滚动条 */
+        }
+
+        /* --- 牌桌区域 --- */
+        .table-area {
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+            flex-grow: 1;
+        }
+
+        .card-container {
+            display: flex;
+            flex-wrap: nowrap;
+            justify-content: center;
+            align-items: center;
+            padding: 100px 20px 50px 20px;
+            width: 100%;
+            box-sizing: border-box;
+            transition: all 0.5s ease;
+        }
+
+        .card {
+            width: 100px;
+            height: 140px;
+            flex-shrink: 0;
+            background-color: #fff;
+            border-radius: 10px;
+            box-shadow: -2px 0 5px rgba(0,0,0,0.3);
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 10px;
+            box-sizing: border-box;
+            user-select: none;
+            cursor: pointer;
+            
+            /* 动画过渡 */
+            transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), 
+                        opacity 0.4s ease, 
+                        box-shadow 0.3s ease, 
+                        border-color 0.3s ease;
+            
+            margin-left: -60px;
+            border: 2px solid transparent;
+            /* z-index 将在 JS 中动态设置 */
+        }
+
+        .card:first-child { margin-left: 0; }
+        .card.red { color: #d32f2f; }
+        .card.black { color: #212121; }
+
+        /* 选中状态 */
+        .card.selected {
+            transform: translateY(-50px) scale(1.05);
+            border-color: #ffd700;
+            box-shadow: 0 15px 30px rgba(0,0,0,0.4);
+        }
+
+        .card:hover:not(.selected) {
+            transform: translateY(-20px) scale(1.05);
+        }
+        .card.selected:hover {
+            transform: translateY(-55px) scale(1.05);
+        }
+
+        /* 出牌动画类 */
+        .card.playing-out {
+            /* 向上飞出并稍微散开 */
+            transform: translateY(-300px) scale(0.8) rotate(var(--rotate-deg)) !important;
+            opacity: 0;
+            pointer-events: none;
+            z-index: 9999 !important; /* 飞出时在最上层 */
+        }
+
+        /* 内部元素 */
+        .corner {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            line-height: 1;
+            font-weight: bold;
+            pointer-events: none;
+        }
+        .top-left { align-items: flex-start; }
+        .bottom-right { align-items: flex-end; }
+        .card-value { font-size: 24px; }
+        .card-suit-small { font-size: 18px; }
+        .center-suit {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 60px;
+            opacity: 0.9;
+            pointer-events: none;
+        }
+        .rotated { transform: rotate(180deg); }
+
+        /* --- 控制栏区域 --- */
+        .controls {
+            display: flex;
+            gap: 20px;
+            padding: 20px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 15px;
+            backdrop-filter: blur(5px);
+            margin-bottom: 30px;
+            align-items: center;
+        }
+
+        button {
+            padding: 12px 24px;
+            font-size: 16px;
+            font-weight: bold;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+        }
+
+        button:active {
+            transform: scale(0.95);
+        }
+
+        .btn-play {
+            background-color: #ffd700;
+            color: #333;
+        }
+        .btn-play:hover {
+            background-color: #ffea70;
+            box-shadow: 0 0 15px rgba(255, 215, 0, 0.6);
+        }
+        .btn-play:disabled {
+            background-color: #ccc;
+            color: #666;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+
+        .btn-reset {
+            background-color: #fff;
+            color: #333;
+        }
+        .btn-reset:hover {
+            background-color: #f0f0f0;
+        }
+
+        .status-text {
+            color: white;
+            font-size: 14px;
+            min-width: 120px;
+            text-align: center;
+            font-family: monospace;
+        }
+
+        /* 按钮抖动动画 (当未选中牌却点击出牌时) */
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
+        }
+        .shake {
+            animation: shake 0.3s ease-in-out;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 牌桌区域 -->
+    <div class="table-area">
+        <div id="card-container" class="card-container"></div>
+    </div>
+
+    <!-- 控制栏 -->
+    <div class="controls">
+        <button id="btn-reset" class="btn-reset" >复原 (Reset)</button>
+        <div id="status-text" class="status-text">已选中: 0</div>
+        <button id="btn-play" class="btn-play">出牌 (Play)</button>
+    </div>
+
+    <script>
+        // 初始牌组数据
+        const initialCardsData = [
+            { value: 'A', suit: 'hearts' },
+            { value: 'K', suit: 'spades' },
+            { value: 'Q', suit: 'diamonds' },
+            { value: 'J', suit: 'clubs' },
+            { value: '10', suit: 'hearts' },
+            { value: '9', suit: 'spades' },
+            { value: '8', suit: 'diamonds' },
+            { value: '7', suit: 'clubs' },
+            { value: '6', suit: 'hearts' },
+            { value: '5', suit: 'spades' },
+            { value: '4', suit: 'diamonds' },
+            { value: '3', suit: 'clubs' },
+            { value: '2', suit: 'hearts' }
+        ];
+
+        // 当前手牌数据 (会被修改)
+        let currentHand = [...initialCardsData];
+
+        const suitIcons = {
+            hearts: '♥', diamonds: '♦', clubs: '♣', spades: '♠'
+        };
+        const redSuits = ['hearts', 'diamonds'];
+
+        const container = document.getElementById('card-container');
+        const btnPlay = document.getElementById('btn-play');
+        const btnReset = document.getElementById('btn-reset');
+        const statusText = document.getElementById('status-text');
+
+        // 复原逻辑
+        async function resetGame() {
+            // 从后端接收手牌数据（如果需要动态加载）
+            try {
+                const response = await fetch('/api/startGame', { method: 'POST' });
+                if (!response.ok) {
+                    throw new Error('网络响应失败');
+                }
+                const data = await response.json();
+                // 后端返回的格式是 { player1: [...], player2: [...], player3: [...] }
+                // 这里我们只取 player1 的牌作为当前手牌
+                // 遍历后端返回的牌数据，转换成 { value, suit } 格式
+
+                const player1Cards = data.player1.Cards.map(cardStr => {
+                    const value = cardStr.Value || cardStr.value; // 兼容大小写
+                    // const suit = "hearts";
+                    let suit = cardStr.Suit || cardStr.suit; // 兼容大小写
+                    if(suit == "红桃") suit = "hearts";
+                    else if(suit == "黑桃") suit = "spades";
+                    else if(suit == "方块") suit = "diamonds";
+                    else if(suit == "梅花") suit = "clubs";
+                    return { value, suit};
+                });
+                currentHand = player1Cards;
+                renderHand();
+            } catch (error) {
+                console.error('发生错误:', error);
+                // 如果后端请求失败，仍然使用初始牌组数据
+                currentHand = [...initialCardsData];
+                renderHand();
+            }
+        }
+
+        // 渲染手牌
+        function renderHand() {
+            container.innerHTML = ''; // 清空容器
+
+            currentHand.forEach((card, index) => {
+                var colorClass = redSuits.includes(card.suit) ? 'red' : 'black';
+                var suitSymbol;
+                if (card.value === '大王' || card.value === '小王') {
+                    suitSymbol = '';
+                    if (card.value === '大王') {
+                        colorClass = 'red'; 
+                    } else if (card.value === '小王') {
+                        colorClass = 'black'; 
+                    }
+                } else {
+                    suitSymbol = suitIcons[card.suit];
+                }
+                const cardEl = document.createElement('div');
+                cardEl.className = `card ${colorClass}`;
+                
+                // 关键：设置 z-index 保证右压左，且选中不挡右
+                cardEl.style.zIndex = index;
+                
+                // 存储唯一 ID 用于后续查找删除
+                const cardId = `card-${index}-${Date.now()}`; 
+                cardEl.dataset.id = cardId;
+                cardEl.dataset.value = card.value;
+                cardEl.dataset.suit = card.suit;
+                cardEl.dataset.originalIndex = index;
+
+                cardEl.innerHTML = `
+                    <div class="corner top-left">
+                        <span class="card-value">${card.value}</span>
+                        <span class="card-suit-small">${suitSymbol}</span>
+                    </div>
+                    <div class="center-suit">${suitSymbol}</div>
+                    <div class="corner bottom-right">
+                        <span class="card-value rotated">${card.value}</span>
+                        <span class="card-suit-small rotated">${suitSymbol}</span>
+                    </div>
+                `;
+
+                // 点击选中逻辑
+                cardEl.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    this.classList.toggle('selected');
+                    updateStatus();
+                });
+
+                container.appendChild(cardEl);
+            });
+
+            updateStatus();
+        }
+
+        // 更新状态文字
+        function updateStatus() {
+            const count = document.querySelectorAll('.card.selected').length;
+            statusText.textContent = `已选中: ${count}`;
+            
+            if (count > 0) {
+                btnPlay.disabled = false;
+                btnPlay.style.opacity = '1';
+            } else {
+                btnPlay.disabled = true;
+                btnPlay.style.opacity = '0.7';
+            }
+        }
+
+        // 出牌逻辑
+        function playSelectedCards() {
+            const selectedCards = document.querySelectorAll('.card.selected');
+            
+            if (selectedCards.length === 0) {
+                // 如果没有选中，按钮抖动提示
+                btnPlay.classList.add('shake');
+                setTimeout(() => btnPlay.classList.remove('shake'), 300);
+                return;
+            }
+
+            // 禁用按钮防止重复点击
+            btnPlay.disabled = true;
+
+            selectedCards.forEach((cardEl, i) => {
+                // 添加随机旋转角度，让出牌更自然
+                const randomRot = (Math.random() - 0.5) * 30; 
+                cardEl.style.setProperty('--rotate-deg', `${randomRot}deg`);
+                
+                // 添加出牌动画类
+                cardEl.classList.add('playing-out');
+            });
+
+            // 等待动画完成后从数据模型和 DOM 中移除
+            setTimeout(() => {
+                const selectedIds = Array.from(selectedCards).map(el => el.dataset.id);
+                
+                // 过滤掉已打出的牌
+                // 注意：这里我们简单通过重新渲染来同步状态，或者手动移除 DOM
+                // 为了保持 z-index 顺序正确，重新渲染是最稳妥的
+                
+                // 获取剩余牌的索引 (通过比对 dataset 或直接重构数据)
+                // 由于 currentHand 是对象数组，没有 ID，我们需要一种方式标记哪些被打出了。
+                // 简单做法：根据选中的视觉元素对应的原始数据位置来移除。
+                // 但更稳健的方法是：在渲染时给数据也加上临时 ID，或者根据值+花色匹配（如果有重复牌则不行）。
+                // 这里采用：重新遍历 currentHand，如果该位置的牌在 DOM 中被选中了，就移除。
+                // 但由于 DOM 已经可能乱序（如果之前有过操作），最安全的是：
+                // 1. 记录当前所有选中牌的 (value, suit) 组合。
+                // 2. 从 currentHand 中移除对应数量的匹配项。
+                
+                const cardsToRemove = [];
+                selectedCards.forEach(el => {
+                    cardsToRemove.push({
+                        v: el.dataset.value,
+                        s: el.dataset.suit
+                    });
+                });
+
+                // 构建新的手牌数组
+                const newHand = [];
+                const removeCounts = {}; // 记录每种牌需要移除的数量，防止误删同名不同张的牌（虽然这里每张唯一，但逻辑严谨点）
+                
+                // 统计要移除的
+                cardsToRemove.forEach(c => {
+                    const key = `${c.v}-${c.s}`;
+                    removeCounts[key] = (removeCounts[key] || 0) + 1;
+                });
+
+                // 过滤当前手牌
+                currentHand.forEach(card => {
+                    const key = `${card.value}-${card.suit}`;
+                    if (removeCounts[key] && removeCounts[key] > 0) {
+                        removeCounts[key]--; // 消耗一个移除名额
+                        // 这张牌被移除了，不加入新数组
+                    } else {
+                        newHand.push(card);
+                    }
+                });
+
+                currentHand = newHand;
+                
+                // 重新渲染
+                renderHand();
+                
+                // 恢复按钮
+                btnPlay.disabled = false;
+                updateStatus();
+
+            }, 400); // 动画时长略小于 CSS transition 以确保平滑
+        }
+
+        
+        // 事件绑定
+        btnPlay.addEventListener('click', playSelectedCards);
+        btnReset.addEventListener('click', resetGame);
+
+        // 初始化
+        renderHand();
+
+    </script>
+</body>
+</html>
