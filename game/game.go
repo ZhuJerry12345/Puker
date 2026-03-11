@@ -19,6 +19,18 @@ func HandleGameH(w http.ResponseWriter, r *http.Request) {
 	w.Write(file)
 }
 
+func HandleChatH(w http.ResponseWriter, r *http.Request) {
+	log.Printf("Serving chat.html for %s", r.RemoteAddr)
+	// 读取当前目录下的 chat.html
+	file, err := os.ReadFile("html/chat.html")
+	if err != nil {
+		http.Error(w, "Frontend file not found", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Write(file)
+}
+
 func HandleStartGame(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Start game request from %s", r.RemoteAddr)
 	if r.Method != http.MethodPost {

@@ -13,7 +13,7 @@ type Player struct {
 	ID   string          // 玩家ID或用户名
 	Conn *websocket.Conn // 玩家WebSocket连接
 
-	Status string // 玩家状态（如：在线、离线、准备中）
+	Status string // 玩家状态（如：掉线中、房间中、准备中）
 	Room   *Room  // 玩家所在的房间 用于注销玩家
 
 	send chan []byte // 发送消息的通道
@@ -148,12 +148,43 @@ func (pm *PlayerManager) Run() {
 	}
 }
 
+func UpdatePlayerStatus(p *Player) {
+	log.Println("处理更新玩家状态请求,来源", p.ID)
+	type msg struct {
+		Event  string `json:"event"`
+		Name   string `json:"name"`
+		Status string `json:"status"`
+	}
+	m := msg{
+		Event: "ChatUpdatePlayerStatus",
+		Name:  p.ID,
+	}
+	p.mu.RLock()
+	m.Status = p.Status
+	p.mu.RUnlock()
+
+	message, _ := json.Marshal(m)
+	p.SendMessage(message)
+}
+
 // 广播消息给所有在线玩家
-func (pm *PlayerManager) Broadcast(message []byte, from string) {
-	log.Println("准备广播消息,来源", from, "数据:", string(message))
+func (pm *PlayerManager) Broadcast(from string, d json.RawMessage) {
+	log.Println("准备广播消息,来源", from, "数据:", string(d))
 	pm.mu.RLock()
 	defer pm.mu.RUnlock()
 
+	// 解析消息内容
+	type res struct {
+		Message string `json:"message"`
+	}
+	var r res
+	err := json.Unmarshal(d, &r)
+	if err != nil {
+		log.Printf("消息格式错误: %v", err)
+		return
+	}
+
+	// 构造广播消息
 	type msg struct {
 		Event string      `json:"event"`
 		Data  interface{} `json:"data"`
@@ -163,13 +194,13 @@ func (pm *PlayerManager) Broadcast(message []byte, from string) {
 		Message string `json:"message"`
 	}
 	m := msg{
-		Event: "Broadcast",
+		Event: "ChatBroadcast",
 		Data: data{
 			From:    from,
-			Message: string(message),
+			Message: r.Message,
 		},
 	}
-	message, _ = json.Marshal(m)
+	message, _ := json.Marshal(m)
 	for _, player := range pm.PlayerList {
 		log.Printf("向玩家 %s 广播消息: %s", player.ID, string(message))
 		player.SendMessage(message)

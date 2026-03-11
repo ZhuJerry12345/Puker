@@ -80,7 +80,7 @@ func (r *Room) Run() {
 func JoinRoom(p *Player, data json.RawMessage) {
 	log.Println("处理加入房间请求,来源", p.ID, "数据:", string(data))
 	type req struct {
-		RoomID string `json:"room_id"`
+		RoomID string `json:"RoomId"`
 	}
 	var r req
 	err := json.Unmarshal(data, &r)
@@ -134,6 +134,35 @@ func LeaveRoom(p *Player, data json.RawMessage) {
 	<-room.done     // 等待离开房间完成
 
 	room.BroadcastPlayerList() // 广播房间玩家列表
+}
+
+func ToggleReady(p *Player, data json.RawMessage) {
+	log.Println("处理准备请求,来源", p.ID, "数据:", string(data))
+	type req struct {
+		IsReady bool `json:"IsReady"`
+	}
+	var r req
+	err := json.Unmarshal(data, &r)
+	if err != nil {
+		log.Printf("准备请求格式错误: %v", err)
+		return
+	}
+
+	p.mu.Lock() // 玩家上锁
+	if p.Room == nil {
+		log.Printf("玩家 %s 不在房间中，无法准备", p.ID)
+		p.mu.Unlock()
+		return
+	}
+	if r.IsReady {
+		p.Status = "准备中"
+	} else {
+		p.Status = "房间中"
+	}
+	p.mu.Unlock()
+
+	UpdatePlayerStatus(p)
+	p.Room.BroadcastPlayerList() // 广播房间玩家列表
 }
 
 func (r *Room) ReplaceWithRobot(p *Player) {
@@ -229,7 +258,7 @@ func (r *Room) BroadcastPlayerList() {
 	}
 
 	response := res{
-		Event: "RoomPlayerList",
+		Event: "ChatRoomPlayerList",
 		Data:  playerList,
 	}
 

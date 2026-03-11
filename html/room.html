@@ -39,28 +39,13 @@
     </div>
     <!--聊天部分-->
     <div id="chat">
-        <h2>聊天</h2>
-        <!-- 聊天框 -->
-        <div id="broadcast">
-        <!-- 输入框 -->
-        <input type="text" id="chat-input" placeholder="输入消息">
-        <button id="send-btn">发送</button>
-
-        <!-- 开始游戏 -->
-        <button id="start-game-btn">开始游戏</button>
-        <!-- 创建房间 -->
-        <button id="create-room-btn">创建房间</button>
-        <!-- 加入房间 -->
-        <input type="text" id="join-room-input" placeholder="输入房间ID">
-        <button id="join-room-btn">加入房间</button>
-        <!-- 房间玩家列表 -->
-        <h3>房间玩家列表</h3>
-        <div id="room-player-list">
-
+        <iframe id="chat-frame" src="/chat" title="Chat Table" style="width: 100%; height: 100%; border: none;"></iframe>
     </div>
 
     <script>
         let ws = null
+        const frameTable = document.getElementById('game-table-frame');
+        const frameChat = document.getElementById('chat-frame');
         // 加载页面时初始化WebSocket连接
         window.onload = function() {
             initWS();
@@ -72,28 +57,21 @@
                 console.log('WebSocket连接已打开');
             };
             ws.onmessage = function(event) {
-                console.log('收到消息:', event.data);
+                console.log('收到消息:',event.data);
                 const data = JSON.parse(event.data);
-                // 分情况处理不同事件类型的消息
-                if(data.event === 'Broadcast'){
-                    const broadcastDiv = document.getElementById('broadcast');
-                    const message = document.createElement('p');
-                    message.textContent = data.data.from + ': ' + data.data.message;
-                    broadcastDiv.appendChild(message);
-                } else if(data.event === 'RoomPlayerList') {
-                    const playerListDiv = document.getElementById('room-player-list');
-                    playerListDiv.innerHTML = ''; // 清空当前列表
-                    data.data.forEach(player => {
-                        const playerItem = document.createElement('p');
-                        playerItem.textContent = player.name + ' - ' + player.status;
-                        playerListDiv.appendChild(playerItem);
-                    });
-                }  else if(data.event === 'StartGame'){//转发给game.html处理
-                    console.log('转发StartGame事件给game.html');
-                    const frameTable = document.getElementById('game-table-frame');
+                
+                if (/^Game/.test(data.event)) {
+                    console.log('转发Game事件给game.html');
                     if(frameTable && frameTable.contentWindow) {
-                        frameTable.contentWindow.postMessage(data.data, '*');
+                        frameTable.contentWindow.postMessage(data, '*');
                     }
+                } else if (/^Chat/.test(data.event)) {
+                    console.log('转发Chat事件给chat.html');
+                    if(frameChat && frameChat.contentWindow) {
+                        frameChat.contentWindow.postMessage(data, '*');
+                    }
+                } else {
+                    console.warn('未知事件类型:', data.event);
                 }
             };
             ws.onclose = function() {
@@ -104,39 +82,18 @@
             };
         }
 
-        // 发送消息
-        document.getElementById('send-btn').addEventListener('click', function() {
-            const input = document.getElementById('chat-input');
-            const message = input.value.trim();
-            if(message && ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ event: 'Broadcast', data: message }));
-                input.value = '';
+        // 监听来自子窗口的消息
+        window.addEventListener('message', function(event) {
+            console.log('收到来自子窗口的消息:', event.data);
+            const data = event.data;
+            console.log('转发给服务器');
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                console.warn('WebSocket连接未打开,无法发送消息');
+                return;
             }
+            ws.send(JSON.stringify({ event: data.event, data: data.data }));
         });
 
-        // 创建房间
-        document.getElementById('create-room-btn').addEventListener('click', function() {
-            if(ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ event: 'CreateRoom' }));
-            }
-        });
-
-        // 加入房间
-        document.getElementById('join-room-btn').addEventListener('click', function() {
-            const input = document.getElementById('join-room-input');
-            const roomID = input.value.trim();
-            if(roomID && ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ event: 'JoinRoom', data: { room_id: roomID } }));
-                input.value = '';
-            }
-        });
-
-        // 开始游戏
-        document.getElementById('start-game-btn').addEventListener('click',function(){
-            if(ws && ws.readyState === WebSocket.OPEN){
-                ws.send(JSON.stringify({event:'StartGame'}))
-            }
-        });
     </script>      
 
 </body>

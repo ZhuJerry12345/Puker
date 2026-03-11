@@ -36,6 +36,7 @@ func main() {
 	mux.HandleFunc("/login", login.HandleLoginH)   // 提供前端页面
 	mux.HandleFunc("/signup", login.HandleSignupH) // 提供注册页面
 	mux.HandleFunc("/game", game.HandleGameH)      // 提供游戏页面
+	mux.HandleFunc("/chat", game.HandleChatH)      // 提供聊天页面
 	mux.HandleFunc("/room", room.HandleRoomH)      // 提供房间页面
 
 	mux.HandleFunc("/api/login", login.HandleLogin)                           // 登录接口
@@ -47,7 +48,7 @@ func main() {
 	// 受保护路由 (需要 Session)
 	mux.HandleFunc("/api/user", login.AuthMiddleware(login.HandleUserData))
 
-	port := ":80"
+	port := ":8080"
 	log.Printf("服务器启动于 http://localhost%s", port)
 	log.Printf("模式：有状态认证 (Session/Cookie)")
 	log.Printf("测试账号: admin / 123456")

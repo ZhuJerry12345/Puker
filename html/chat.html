@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>游戏聊天室</title>
+    <style>
+        /* --- 基础重置 --- */
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f0f2f5;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden; /* 防止整个页面滚动，只让内部区域滚动 */
+        }
+
+        /* --- 1. 顶部：房间操作区 --- */
+        .room-control-panel {
+            background-color: #ffffff;
+            padding: 10px;
+            border-bottom: 1px solid #ddd;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .input-group {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        input[type="text"] {
+            padding: 6px 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 14px;
+            outline: none;
+        }
+        input[type="text"]:focus { border-color: #4a90e2; }
+
+        button {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.2s;
+            color: white;
+        }
+
+        .btn-create { background-color: #27ae60; }
+        .btn-create:hover { background-color: #219150; }
+
+        .btn-join { background-color: #2980b9; }
+        .btn-join:hover { background-color: #2471a3; }
+
+        /* --- 2. 玩家列表区 --- */
+        .player-list-container {
+            background-color: #fff;
+            height: 150px; /* 固定高度 */
+            border-bottom: 1px solid #ddd;
+            overflow-y: auto;
+            flex-shrink: 0;
+        }
+
+        .list-header {
+            padding: 8px 10px;
+            background-color: #f8f9fa;
+            font-weight: bold;
+            font-size: 13px;
+            color: #555;
+            border-bottom: 1px solid #eee;
+            position: sticky;
+            top: 0;
+        }
+
+        .player-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 10px;
+            border-bottom: 1px solid #f1f1f1;
+            font-size: 14px;
+        }
+        .player-item:last-child { border-bottom: none; }
+        
+        .player-name { font-weight: 500; color: #333; }
+        .player-status { font-size: 12px; padding: 2px 6px; border-radius: 10px; }
+        .status-waiting { background-color: #eee; color: #666; }
+        .status-ready { background-color: #d4edda; color: #155724; }
+        .status-playing { background-color: #cce5ff; color: #004085; }
+
+        /* --- 3. 控制按钮区 --- */
+        .action-buttons {
+            padding: 10px;
+            background-color: #fff;
+            border-bottom: 1px solid #ddd;
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .btn-ready { background-color: #f39c12; width: 100px; }
+        .btn-ready:hover { background-color: #d35400; }
+        .btn-ready.ready-active { background-color: #27ae60; } /* 准备后的状态 */
+
+        .btn-start { background-color: #e74c3c; width: 100px; }
+        .btn-start:hover { background-color: #c0392b; }
+        .btn-start:disabled { background-color: #ccc; cursor: not-allowed; }
+
+        /* --- 4. 聊天显示区 --- */
+        .chat-display-area {
+            flex: 1; /* 占据剩余所有空间 */
+            background-color: #fff;
+            padding: 10px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .chat-message {
+            max-width: 80%;
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 14px;
+            line-height: 1.4;
+            word-wrap: break-word;
+        }
+
+        .msg-system {
+            align-self: center;
+            background-color: #f1f1f1;
+            color: #666;
+            font-size: 12px;
+            text-align: center;
+            max-width: 90%;
+        }
+
+        .msg-other {
+            align-self: flex-start;
+            background-color: #e9ecef;
+            color: #333;
+            border-bottom-left-radius: 2px;
+        }
+
+        .msg-me {
+            align-self: flex-end;
+            background-color: #d1ecf1;
+            color: #0c5460;
+            border-bottom-right-radius: 2px;
+        }
+
+        .msg-sender {
+            font-size: 11px;
+            font-weight: bold;
+            margin-bottom: 2px;
+            display: block;
+            color: #555;
+        }
+
+        /* --- 5. 底部输入区 --- */
+        .chat-input-area {
+            padding: 10px;
+            background-color: #fff;
+            border-top: 1px solid #ddd;
+            display: flex;
+            gap: 8px;
+            flex-shrink: 0;
+        }
+
+        .chat-input-area input {
+            flex: 1;
+            padding: 8px 12px;
+            border: 1px solid #ccc;
+            border-radius: 20px;
+            outline: none;
+        }
+        .chat-input-area input:focus { border-color: #4a90e2; }
+
+        .btn-send {
+            background-color: #4a90e2;
+            border-radius: 20px;
+            padding: 8px 20px;
+        }
+        .btn-send:hover { background-color: #357abd; }
+
+        /* 滚动条美化 */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #ccc; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #aaa; }
+    </style>
+</head>
+<body>
+
+    <!-- 1. 顶部：房间操作 -->
+    <div class="room-control-panel">
+        <button class="btn-create" onclick="createRoom()">创建房间</button>
+        
+        <div class="input-group">
+            <input type="text" id="roomIdInput" placeholder="输入房间号">
+            <button class="btn-join" onclick="joinRoom()">加入房间</button>
+        </div>
+        
+        <div style="font-size: 12px; color: #666; margin-left: 10px;" id="roomStatusText">未连接房间</div>
+    </div>
+
+    <!-- 2. 玩家列表 -->
+    <div class="player-list-container">
+        <div class="list-header">当前房间玩家 (<span id="playerCount">0</span>)</div>
+        <div id="playerListContent">
+            <!-- 玩家项将通过 JS 动态插入 -->
+            <div style="padding:10px; text-align:center; color:#999; font-size:13px;">暂无玩家</div>
+        </div>
+    </div>
+
+    <!-- 3. 控制按钮 -->
+    <div class="action-buttons">
+        <button class="btn-ready" id="btnReady" onclick="toggleReady()" >准备</button>
+        <button class="btn-start" id="btnStart" onclick="startGame()" >开始游戏</button>
+    </div>
+
+    <!-- 4. 聊天框 (消息展示) -->
+    <div class="chat-display-area" id="chatDisplay">
+        <div class="chat-message msg-system">欢迎来到游戏聊天室！请先创建或加入房间。</div>
+    </div>
+
+    <!-- 5. 聊天输入框 -->
+    <div class="chat-input-area">
+        <input type="text" id="chatInput" placeholder="输入消息..." onkeypress="handleKeyPress(event)">
+        <button class="btn-send" onclick="sendMessage()">发送</button>
+    </div>
+
+    <script>
+        // --- 模拟状态数据 ---
+        let currentRoom = null;
+        let myName = "玩家_" + Math.floor(Math.random() * 1000);
+        let isReady = false;
+        
+        // 模拟玩家列表数据
+        let players = [
+            { name: "房主_001", status: "waiting" },
+            { name: "路人甲", status: "ready" }
+        ];
+
+        // --- 初始化 ---
+        window.onload = function() {
+            renderPlayerList();
+            // 模拟收到一条欢迎消息
+            // addMessage("system", "系统已就绪");
+        };
+
+        // --- 功能函数 ---
+
+        window.addEventListener('message', function(event) {
+            // 这里可以处理来自 A.html 的消息，例如游戏状态更新等
+            console.log("收到来自 A.html 的消息:", event.data);
+            const data = event.data;
+            switch(data.event) {
+                case 'ChatRoomPlayerList':
+                    // 更新玩家状态
+                    console.log('收到ChatRoomPlayerList事件,更新玩家列表');
+                    players = data.data; 
+                    renderPlayerList();
+                    break;
+                case 'ChatUpdatePlayerStatus':
+                    console.log('收到ChatUpdatePlayerStatus事件,更新玩家状态');
+                    // 这里可以根据 data.data 中的信息更新玩家状态
+                    if (data.status == "准备中") {
+                        isReady = true;
+                        const player = players.find(p => p.name === data.name);
+                        if (player) {
+                            player.status = "ready";
+                            renderPlayerList();
+                        }
+                    } else if (data.status == "房间中") {
+                        isReady = false;
+                        const player = players.find(p => p.name === data.name);
+                        if (player) {
+                            player.status = "waiting";
+                            renderPlayerList();
+                        }
+                    }
+                    // 更新按钮样式
+                    const btn = document.getElementById('btnReady');
+                    if (isReady) {
+                        btn.innerText = "取消准备";
+                        btn.classList.add('ready-active');
+                        addMessage("system", "你已准备就绪");
+                    } else {
+                        btn.innerText = "准备";
+                        btn.classList.remove('ready-active');
+                        addMessage("system", "你取消了准备");
+                    }
+                    break;
+                case 'GameStart':
+                    addMessage("system", "游戏开始！");
+                    break;
+                case 'ChatBroadcast':
+                    addMessage(data.data.from, data.data.message);
+                    break;
+                // 其他事件类型...
+            }
+        });
+
+        function createRoom() {
+            window.parent.postMessage({ event: "CreateRoom", data: {} }, '*');
+        }
+
+        function joinRoom() {
+            const RoomId = document.getElementById('roomIdInput').value.trim();
+            if (!RoomId) {
+                alert("请输入房间号！");
+                return;
+            }
+            window.parent.postMessage({ event: "JoinRoom", data: { RoomId: RoomId } }, '*');
+        }
+
+        function toggleReady() {
+            console.log("切换准备状态,当前状态:", isReady);
+            if (!isReady){
+                window.parent.postMessage({ event: "ToggleReady", data: {"IsReady": true} }, '*');
+            }else{
+                window.parent.postMessage({ event: "ToggleReady", data: {"IsReady": false} }, '*');
+            }
+            
+            // isReady = !isReady;
+            // const btn = document.getElementById('btnReady');
+            
+            // // 更新本地状态
+            // const meIndex = players.findIndex(p => p.name.includes("(我)"));
+            // if (meIndex !== -1) {
+            //     players[meIndex].status = isReady ? "ready" : "waiting";
+            //     renderPlayerList();
+            // }
+
+
+            
+            // TODO: 这里应该通过 postMessage 告诉 C.html 或后端
+        }
+
+        function startGame() {
+            window.parent.postMessage({ event: "StartGame", data: {} }, '*');
+        }
+
+        function sendMessage() {
+            const input = document.getElementById('chatInput');
+            const text = input.value.trim();
+            if (!text) return;
+
+            window.parent.postMessage({ event: "Broadcast", data: { message: text } }, '*');
+            // // 添加消息到界面
+            // addMessage("me", text);
+            input.value = "";
+
+            // TODO: 实际项目中，这里需要通过 WebSocket 或 postMessage 发送给服务器或其他客户端
+        }
+
+        function handleKeyPress(e) {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        }
+
+        // --- 渲染辅助函数 ---
+
+        function renderPlayerList() {
+            const container = document.getElementById('playerListContent');
+            document.getElementById('playerCount').innerText = players.length;
+            
+            if (players.length === 0) {
+                container.innerHTML = '<div style="padding:10px; text-align:center; color:#999; font-size:13px;">暂无玩家</div>';
+                return;
+            }
+
+            let html = '';
+            players.forEach(p => {
+                let statusClass = 'status-waiting';
+                let statusText = '等待中';
+                
+                if (p.status === '掉线中') {
+                    statusClass = 'status-offline';
+                    statusText = '掉线中';
+                } else if (p.status === '房间中') {
+                    statusClass = 'status-playing';
+                    statusText = '未准备';
+                } else if (p.status === '准备中') {
+                    statusClass = 'status-ready';
+                    statusText = '已准备';
+                }
+
+                html += `
+                    <div class="player-item">
+                        <span class="player-name">${p.name}</span>
+                        <span class="player-status ${statusClass}">${statusText}</span>
+                    </div>
+                `;
+            });
+            container.innerHTML = html;
+        }
+
+        function addMessage(type, text) {
+            const container = document.getElementById('chatDisplay');
+            const div = document.createElement('div');
+            
+            if (type === 'system') {
+                div.className = 'chat-message msg-system';
+                div.innerText = text;
+            } else if (type === 'me') {
+                div.className = 'chat-message msg-me';
+                div.innerHTML = `<span class="msg-sender">我</span>${escapeHtml(text)}`;
+            } else {
+                // other
+                div.className = 'chat-message msg-other';
+                div.innerHTML = `<span class="msg-sender">${type}</span>${escapeHtml(text)}`;
+            }
+
+            container.appendChild(div);
+            // 自动滚动到底部
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function escapeHtml(text) {
+            return text
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+    </script>
+</body>
+</html>

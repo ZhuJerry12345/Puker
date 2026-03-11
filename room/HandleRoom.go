@@ -100,7 +100,7 @@ func ProcessEvent(p *Player, d []byte) {
 	switch r.Event {
 	case "Broadcast":
 		log.Println("收到Broadcast事件,来源", p.ID, "数据:", string(r.Data))
-		PM.Broadcast(r.Data, p.ID)
+		PM.Broadcast(p.ID, r.Data)
 	case "RoomPlayerList":
 		log.Println("收到RoomPlayerList事件,来源", p.ID, "数据:", string(r.Data))
 		RoomPlayerList(p, r.Data)
@@ -113,6 +113,12 @@ func ProcessEvent(p *Player, d []byte) {
 	case "LeaveRoom":
 		log.Println("收到LeaveRoom事件,来源", p.ID, "数据:", string(r.Data))
 		LeaveRoom(p, r.Data)
+	case "ToggleReady":
+		log.Println("收到ToggleReady事件,来源", p.ID, "数据:", string(r.Data))
+		ToggleReady(p, r.Data)
+	case "UpdatePlayerStatus":
+		log.Println("收到UpdatePlayerStatus事件,来源", p.ID, "数据:", string(r.Data))
+		UpdatePlayerStatus(p)
 	case "StartGame":
 		log.Println("收到StartGame事件,来源", p.ID, "数据:", string(r.Data))
 		StartGame(p, r.Data)
@@ -122,9 +128,40 @@ func ProcessEvent(p *Player, d []byte) {
 
 }
 
+type CardTable struct {
+	Hand   *game.Deck `json:"hand"`
+	Public *game.Deck `json:"public"`
+}
+
 func StartGame(p *Player, d []byte) {
 	log.Printf("StartGame event received from player %s with data: %s", p.ID, string(d))
-	// 目前仅给该玩家发牌，后续可以扩展为给房间内所有玩家发牌
+
+	// 判断是否是房主
+	if p.Room == nil {
+		log.Printf("玩家 %s 不在任何房间中", p.ID)
+		return
+	}
+
+	room := p.Room
+	room.mu.RLock()
+	isOwner := room.Hoster == p.ID
+	room.mu.RUnlock()
+	if !isOwner {
+		log.Printf("玩家 %s 不是房主，无法开始游戏", p.ID)
+		return
+	}
+
+	// 判断房间内玩家是否都准备了
+	room.mu.RLock()
+	for _, player := range room.PlayerList {
+		if player.Status != "准备中" {
+			log.Printf("玩家 %s 状态为 %s,无法开始游戏", player.ID, player.Status)
+			room.mu.RUnlock()
+			return
+		}
+	}
+	room.mu.RUnlock()
+
 	var deck *game.Deck
 	var err error
 	// 加载牌堆数据
@@ -133,28 +170,42 @@ func StartGame(p *Player, d []byte) {
 		log.Printf("Error loading deck: %v", err)
 		return
 	}
-
 	log.Printf("Deck loaded successfully with %d cards", len(deck.Cards))
 
+	// 洗牌
 	deck.Shuffle()
 	log.Printf("Deck shuffled")
 
-	playerHand, err := deck.Deliver(14)
+	// 发5张公共牌
+	publicCards, err := deck.Deliver(5)
 	if err != nil {
 		log.Printf("Error delivering cards to player %s: %v", p.ID, err)
 		return
 	}
-	playerHand.Sort()
 
-	// 发送牌给玩家
+	// 发送牌给所有玩家
+	for _, player := range room.PlayerList {
+		hand, err := deck.Deliver(2)
+		if err != nil {
+			log.Printf("Error delivering cards to player %s: %v", player.ID, err)
+			return
+		}
+		DeliverCards(player, hand, publicCards)
+	}
+}
+
+func DeliverCards(p *Player, hand *game.Deck, public *game.Deck) {
 	response := struct {
-		Event string     `json:"event"`
-		Data  *game.Deck `json:"data"`
+		Event string    `json:"event"`
+		Data  CardTable `json:"data"`
 	}{
-		Event: "StartGame",
-		Data:  playerHand,
+		Event: "GameCards",
+		Data: CardTable{
+			Hand:   hand,
+			Public: public,
+		},
 	}
-	if err := p.Conn.WriteJSON(response); err != nil {
-		log.Printf("Error sending StartGame event to player %s: %v", p.ID, err)
-	}
+
+	r, _ := json.Marshal(response)
+	p.SendMessage(r)
 }

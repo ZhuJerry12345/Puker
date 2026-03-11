@@ -191,7 +191,8 @@
 
     <!-- 牌桌区域 -->
     <div class="table-area">
-        <div id="card-container" class="card-container"></div>
+        <div id="card-container-public" class="card-container"></div>
+        <div id="card-container-hand" class="card-container"></div>
     </div>
 
     <!-- 控制栏 -->
@@ -221,25 +222,26 @@
 
         // 当前手牌数据 (会被修改)
         let currentHand = [...initialCardsData];
+        let currentPublic = [...initialCardsData]; // 公共牌数据
 
         const suitIcons = {
             hearts: '♥', diamonds: '♦', clubs: '♣', spades: '♠'
         };
         const redSuits = ['hearts', 'diamonds'];
 
-        const container = document.getElementById('card-container');
+        const containerPublic = document.getElementById('card-container-public');
+        const containerHand = document.getElementById('card-container-hand');
         const btnPlay = document.getElementById('btn-play');
         const btnReset = document.getElementById('btn-reset');
         const statusText = document.getElementById('status-text');
 
+        // 监听来自父窗口的消息
         window.addEventListener('message', function(event) {
-            console.log('收到来自父窗口的消息:', event.data);
             const data = event.data;
-            // if (data.event === 'StartGame') {
-                // 这里可以根据后端传来的数据来设置 currentHand
-                // 例如：currentHand = data.cards;
-                // 然后重新渲染
-                currentHand = data.Cards.map(cardStr => {
+            console.log('game收到来自父窗口的消息:', data.event, data.data);
+            if(data.event === 'GameCards') {
+                console.log('game收到GameCards事件,更新手牌');
+                currentHand = data.data.hand.Cards.map(cardStr => {
                     const value = cardStr.Value || cardStr.value; // 兼容大小写
                     let suit = cardStr.Suit || cardStr.suit; // 兼容大小写
                     if(suit == "红桃") suit = "hearts";
@@ -248,51 +250,32 @@
                     else if(suit == "梅花") suit = "clubs";
                     return { value, suit};
                 });
-                renderHand();
-            // }
+                renderHand(containerHand, currentHand);
+                currentPublic = data.data.public.Cards.map(cardStr => {
+                    const value = cardStr.Value || cardStr.value; // 兼容大小写
+                    let suit = cardStr.Suit || cardStr.suit; // 兼容大小写
+                    if(suit == "红桃") suit = "hearts";
+                    else if(suit == "黑桃") suit = "spades";
+                    else if(suit == "方块") suit = "diamonds";
+                    else if(suit == "梅花") suit = "clubs";
+                    return { value, suit};
+                });
+                renderHand(containerPublic, currentPublic);
+            } else {
+                console.warn('game收到未知事件类型:', data.event);
+            }
         });
 
-        // 复原逻辑
+        // 重置游戏状态
         async function resetGame() {
-            // 测试：恢复默认设置
-            currentHand = [...initialCardsData];
-            renderHand();
-            // 从后端接收手牌数据（如果需要动态加载）
-            // try {
-            //     const response = await fetch('/api/startGame', { method: 'POST' });
-            //     if (!response.ok) {
-            //         throw new Error('网络响应失败');
-            //     }
-            //     const data = await response.json();
-            //     // 后端返回的格式是 { player1: [...], player2: [...], player3: [...] }
-            //     // 这里我们只取 player1 的牌作为当前手牌
-            //     // 遍历后端返回的牌数据，转换成 { value, suit } 格式
-
-            //     const player1Cards = data.player1.Cards.map(cardStr => {
-            //         const value = cardStr.Value || cardStr.value; // 兼容大小写
-            //         // const suit = "hearts";
-            //         let suit = cardStr.Suit || cardStr.suit; // 兼容大小写
-            //         if(suit == "红桃") suit = "hearts";
-            //         else if(suit == "黑桃") suit = "spades";
-            //         else if(suit == "方块") suit = "diamonds";
-            //         else if(suit == "梅花") suit = "clubs";
-            //         return { value, suit};
-            //     });
-            //     currentHand = player1Cards;
-            //     renderHand();
-            // } catch (error) {
-            //     console.error('发生错误:', error);
-            //     // 如果后端请求失败，仍然使用初始牌组数据
-            //     currentHand = [...initialCardsData];
-            //     renderHand();
-            // }
+            window.parent.postMessage({ event: 'Game' }, '*');
         }
 
-        // 渲染手牌
-        function renderHand() {
+        // 为输入的手牌框渲染手牌
+        function renderHand(container,Hand) {
             container.innerHTML = ''; // 清空容器
 
-            currentHand.forEach((card, index) => {
+            Hand.forEach((card, index) => {
                 var colorClass = redSuits.includes(card.suit) ? 'red' : 'black';
                 var suitSymbol;
                 if (card.value === '大王' || card.value === '小王') {
@@ -429,7 +412,7 @@
                 currentHand = newHand;
                 
                 // 重新渲染
-                renderHand();
+                renderHand(containerHand, currentHand);
                 
                 // 恢复按钮
                 btnPlay.disabled = false;
@@ -444,7 +427,8 @@
         btnReset.addEventListener('click', resetGame);
 
         // 初始化
-        renderHand();
+        renderHand(containerHand, initialCardsData);
+        renderHand(containerPublic, initialCardsData);
 
     </script>
 </body>
